@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure Anonymous Chat</title>
+    <style>
+        :root {
+            --primary: #4361ee;
+            --secondary: #3a0ca3;
+            --accent: #f72585;
+            --light: #f8f9fa;
+            --dark: #212529;
+            --success: #4cc9f0;
+        }
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            width: 100%;
+            max-width: 800px;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+        
+        .auth-screen {
+            padding: 40px;
+            text-align: center;
+        }
+        
+        .chat-screen {
+            display: none;
+            height: 70vh;
+            flex-direction: column;
+        }
+        
+        h1 {
+            color: var(--secondary);
+            margin-bottom: 30px;
+            font-weight: 700;
+        }
+        
+        input {
+            width: 100%;
+            padding: 15px;
+            margin: 10px 0;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+        
+        input:focus {
+            border-color: var(--primary);
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.2);
+        }
+        
+        button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s;
+            margin-top: 10px;
+        }
+        
+        button:hover {
+            background: var(--secondary);
+            transform: translateY(-2px);
+        }
+        
+        .chat-box {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+        }
+        
+        .message {
+            max-width: 70%;
+            padding: 12px 16px;
+            margin-bottom: 15px;
+            border-radius: 18px;
+            position: relative;
+            word-wrap: break-word;
+        }
+        
+        .your-message {
+            background: var(--primary);
+            color: white;
+            margin-left: auto;
+            border-bottom-right-radius: 4px;
+        }
+        
+        .their-message {
+            background: #e9ecef;
+            color: var(--dark);
+            margin-right: auto;
+            border-bottom-left-radius: 4px;
+        }
+        
+        .message-info {
+            font-size: 12px;
+            opacity: 0.8;
+            margin-top: 4px;
+        }
+        
+        .input-area {
+            padding: 15px;
+            display: flex;
+            gap: 10px;
+        }
+        
+        .input-area input {
+            flex: 1;
+            margin: 0;
+        }
+        
+        .share-link {
+            padding: 15px;
+            background: #e9ecef;
+            text-align: center;
+            font-size: 14px;
+        }
+        
+        .share-link a {
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 600;
+        }
+        
+        @media (max-width: 600px) {
+            .container {
+                border-radius: 0;
+                height: 100vh;
+            }
+            
+            .message {
+                max-width: 85%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="auth-screen" id="auth-screen">
+            <h1>Secure Anonymous Chat</h1>
+            <input type="text" id="username" placeholder="Choose a display name">
+            <button id="start-chat">Start New Chat</button>
+        </div>
+        
+        <div class="chat-screen" id="chat-screen">
+            <div class="chat-box" id="chat-box"></div>
+            <div class="input-area">
+                <input type="text" id="message" placeholder="Type your message...">
+                <button id="send-btn">Send</button>
+            </div>
+            <div class="share-link" id="share-link"></div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration - Change this to your backend URL
+        const API_BASE_URL = "http://localhost:5000"; // Replace with your actual backend URL
+        
+        // DOM Elements
+        const authScreen = document.getElementById('auth-screen');
+        const chatScreen = document.getElementById('chat-screen');
+        const chatBox = document.getElementById('chat-box');
+        const usernameInput = document.getElementById('username');
+        const messageInput = document.getElementById('message');
+        const sendBtn = document.getElementById('send-btn');
+        const shareLink = document.getElementById('share-link');
+        
+        // App State
+        let chatId = null;
+        let username = "";
+        let messageInterval = null;
+        
+        // Initialize
+        checkExistingChat();
+        
+        // Event Listeners
+        document.getElementById('start-chat').addEventListener('click', startNewChat);
+        sendBtn.addEventListener('click', sendMessage);
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+        
+        // Functions
+        function checkExistingChat() {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.has('join')) {
+                chatId = urlParams.get('join');
+                showUsernamePrompt();
+            }
+        }
+        
+        function showUsernamePrompt() {
+            authScreen.innerHTML = `
+                <h1>Join Chat Room</h1>
+                <input type="text" id="username" placeholder="Your display name">
+                <button id="join-chat">Join Chat</button>
+            `;
+            document.getElementById('join-chat').addEventListener('click', joinExistingChat);
+        }
+        
+        async function startNewChat() {
+            username = usernameInput.value.trim();
+            if (!username) {
+                alert("Please enter a display name");
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/create_chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username })
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === "success") {
+                    chatId = data.chat_id;
+                    authScreen.style.display = 'none';
+                    chatScreen.style.display = 'flex';
+                    shareLink.innerHTML = `Share this link: <a href="${data.share_url}" target="_blank">${data.share_url}</a>`;
+                    startMessagePolling();
+                } else {
+                    throw new Error(data.message || "Failed to create chat");
+                }
+            } catch (error) {
+                console.error("Error creating chat:", error);
+                alert("Failed to create chat. Please try again.");
+            }
+        }
+        
+        async function joinExistingChat() {
+            username = document.getElementById('username').value.trim();
+            if (!username) {
+                alert("Please enter a display name");
+                return;
+            }
+            
+            authScreen.style.display = 'none';
+            chatScreen.style.display = 'flex';
+            shareLink.innerHTML = `Chat joined! Share this link: <a href="${window.location.href}" target="_blank">${window.location.href}</a>`;
+            startMessagePolling();
+        }
+        
+        function startMessagePolling() {
+            loadMessages();
+            messageInterval = setInterval(loadMessages, 2000);
+        }
+        
+        async function loadMessages() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/messages?chat_id=${chatId}`);
+                const data = await response.json();
+                
+                if (data.status === "success") {
+                    renderMessages(data.messages);
+                }
+            } catch (error) {
+                console.error("Error loading messages:", error);
+            }
+        }
+        
+        function renderMessages(messages) {
+            chatBox.innerHTML = '';
+            messages.forEach(msg => {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = msg.username === username ? 'message your-message' : 'message their-message';
+                messageDiv.innerHTML = `
+                    <div>${msg.message}</div>
+                    <div class="message-info">
+                        ${msg.username} • ${msg.time}
+                    </div>
+                `;
+                chatBox.appendChild(messageDiv);
+            });
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+        
+        async function sendMessage() {
+            const message = messageInput.value.trim();
+            if (!message) return;
+            
+            try {
+                await fetch(`${API_BASE_URL}/api/send`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        chat_id: chatId,
+                        username: username,
+                        message: message
+                    })
+                });
+                
+                messageInput.value = '';
+                loadMessages(); // Immediate update
+            } catch (error) {
+                console.error("Error sending message:", error);
+                alert("Failed to send message. Please try again.");
+            }
+        }
+    </script>
+</body>
+</html>
